@@ -262,10 +262,121 @@ describe('ACP server test', { timeout: 40_000 }, () => {
         });
 
         expect(listSkillsSpy).toHaveBeenCalledWith({
-            cwds: ["/workspace"],
+            cwds: ["/workspace", "/skills/one", "/skills/two"],
             forceReload: true,
         });
         expect(listSkillsSpy.mock.invocationCallOrder[0]!).toBeLessThan(threadStartSpy.mock.invocationCallOrder[0]!);
+    });
+
+    it('prefers ACP additional directories over legacy meta roots for new session skill discovery', async () => {
+        const mockFixture = createCodexMockTestFixture();
+        const codexAcpClient = mockFixture.getCodexAcpClient();
+        const codexAppServerClient = mockFixture.getCodexAppServerClient();
+
+        const extraRootsSetSpy = vi.spyOn(codexAppServerClient, "skillsExtraRootsSet").mockResolvedValue(undefined);
+        const listSkillsSpy = vi.spyOn(codexAppServerClient, "listSkills").mockResolvedValue({data: []});
+        const threadStartSpy = vi.spyOn(codexAppServerClient, "threadStart").mockResolvedValue({
+            thread: {id: "thread-id"} as any,
+            model: "gpt-5",
+            reasoningEffort: "medium",
+            serviceTier: null,
+        } as any);
+        vi.spyOn(codexAppServerClient, "listModels").mockResolvedValue({
+            data: [createTestModel({id: "gpt-5"})],
+            nextCursor: null,
+        });
+
+        const session = await codexAcpClient.newSession({
+            cwd: "/workspace",
+            additionalDirectories: ["/workspace/extra", "/workspace", "/workspace/extra"],
+            mcpServers: [],
+            _meta: {
+                additionalRoots: ["/skills/one", "/workspace/extra", "/workspace"],
+            },
+        });
+
+        expect(session.additionalDirectories).toEqual(["/workspace/extra"]);
+        expect(extraRootsSetSpy).toHaveBeenCalledWith({
+            extraRoots: ["/workspace/extra/.agents/skills"],
+        });
+        expect(listSkillsSpy).toHaveBeenCalledWith({
+            cwds: ["/workspace", "/workspace/extra"],
+            forceReload: true,
+        });
+        expect(extraRootsSetSpy.mock.invocationCallOrder[0]!).toBeLessThan(threadStartSpy.mock.invocationCallOrder[0]!);
+        expect(listSkillsSpy.mock.invocationCallOrder[0]!).toBeLessThan(threadStartSpy.mock.invocationCallOrder[0]!);
+
+        const threadStartRequest = threadStartSpy.mock.calls[0]![0];
+        expect(threadStartRequest.config?.["projects"]).toEqual({
+            "/workspace": {trust_level: "trusted"},
+            "/workspace/extra": {trust_level: "trusted"},
+        });
+        expect(threadStartRequest.config?.["sandbox_workspace_write"]).toEqual({
+            writable_roots: ["/workspace/extra"],
+        });
+    });
+
+    it('applies ACP additional directories to resumed and loaded sessions explicitly', async () => {
+        const mockFixture = createCodexMockTestFixture();
+        const codexAcpClient = mockFixture.getCodexAcpClient();
+        const codexAppServerClient = mockFixture.getCodexAppServerClient();
+
+        vi.spyOn(codexAppServerClient, "skillsExtraRootsSet").mockResolvedValue(undefined);
+        vi.spyOn(codexAppServerClient, "listSkills").mockResolvedValue({data: []});
+        const threadResumeSpy = vi.spyOn(codexAppServerClient, "threadResume").mockResolvedValue({
+            thread: {id: "thread-id"} as any,
+            model: "gpt-5",
+            reasoningEffort: "medium",
+            serviceTier: null,
+        } as any);
+        vi.spyOn(codexAppServerClient, "listModels").mockResolvedValue({
+            data: [createTestModel({id: "gpt-5"})],
+            nextCursor: null,
+        });
+
+        const resumed = await codexAcpClient.resumeSession({
+            sessionId: "resume-id",
+            cwd: "/workspace",
+            additionalDirectories: ["/workspace/resume-extra"],
+        });
+        const loaded = await codexAcpClient.loadSession({
+            sessionId: "load-id",
+            cwd: "/workspace",
+            additionalDirectories: ["/workspace/load-extra"],
+            mcpServers: [],
+        });
+
+        expect(resumed.additionalDirectories).toEqual(["/workspace/resume-extra"]);
+        expect(loaded.additionalDirectories).toEqual(["/workspace/load-extra"]);
+        expect(threadResumeSpy.mock.calls[0]![0].config?.["projects"]).toEqual({
+            "/workspace": {trust_level: "trusted"},
+            "/workspace/resume-extra": {trust_level: "trusted"},
+        });
+        expect(threadResumeSpy.mock.calls[1]![0].config?.["projects"]).toEqual({
+            "/workspace": {trust_level: "trusted"},
+            "/workspace/load-extra": {trust_level: "trusted"},
+        });
+    });
+
+    it('rejects malformed ACP additional directories', async () => {
+        const mockFixture = createCodexMockTestFixture();
+        const codexAcpClient = mockFixture.getCodexAcpClient();
+
+        await expect(codexAcpClient.newSession({
+            cwd: "/workspace",
+            additionalDirectories: ["relative"],
+            mcpServers: [],
+        })).rejects.toThrow("additionalDirectories entries must be absolute paths");
+        await expect(codexAcpClient.newSession({
+            cwd: "/workspace",
+            additionalDirectories: [""],
+            mcpServers: [],
+        })).rejects.toThrow("additionalDirectories entries must not be empty");
+        await expect(codexAcpClient.newSession({
+            cwd: "/workspace",
+            additionalDirectories: [null],
+            mcpServers: [],
+        } as unknown as acp.NewSessionRequest)).rejects.toThrow("additionalDirectories entries must be strings");
     });
 
     it('sanitizes whitespace in ACP MCP server names before adding them to Codex config', async () => {
@@ -417,7 +528,7 @@ describe('ACP server test', { timeout: 40_000 }, () => {
         expect(session.sessionId).toBe("thread-id");
     });
 
-    it('prefetches session additional skill roots before turn start', async () => {
+    it('prefetches skills before turn start', async () => {
         const mockFixture = createCodexMockTestFixture();
         const codexAcpAgent = mockFixture.getCodexAcpAgent();
         const codexAppServerClient = mockFixture.getCodexAppServerClient();
@@ -439,9 +550,6 @@ describe('ACP server test', { timeout: 40_000 }, () => {
         const promptRequest: acp.PromptRequest = {
             sessionId: "session-id",
             prompt: [{ type: "text", text: "Hello" }],
-            _meta: {
-                additionalRoots: ["/skills/one", " /skills/two ", 7]
-            }
         };
         await codexAcpAgent.prompt(promptRequest);
 
@@ -450,6 +558,45 @@ describe('ACP server test', { timeout: 40_000 }, () => {
             forceReload: true,
         });
         expect(listSkillsSpy.mock.invocationCallOrder[0]!).toBeLessThan(turnStartSpy.mock.invocationCallOrder[0]!);
+    });
+
+    it('applies ACP additional directories to turn skill discovery and sandbox policy', async () => {
+        const mockFixture = createCodexMockTestFixture();
+        const codexAcpAgent = mockFixture.getCodexAcpAgent();
+        const codexAppServerClient = mockFixture.getCodexAppServerClient();
+
+        const extraRootsSetSpy = vi.spyOn(codexAppServerClient, "skillsExtraRootsSet").mockResolvedValue(undefined);
+        const listSkillsSpy = vi.spyOn(codexAppServerClient, "listSkills").mockResolvedValue({data: []});
+        const turnStartSpy = vi.spyOn(codexAppServerClient, "turnStart").mockResolvedValue({
+            turn: { id: "turn-id", items: [], status: "inProgress", error: null }
+        } as any);
+        vi.spyOn(codexAppServerClient, "awaitTurnCompleted").mockResolvedValue({
+            threadId: "session-id",
+            turn: { id: "turn-id", items: [], status: "completed", error: null }
+        } as any);
+
+        vi.spyOn(codexAcpAgent, "getSessionState").mockReturnValue(createTestSessionState({
+            sessionId: "session-id",
+            cwd: "/workspace",
+            additionalDirectories: ["/workspace/extra"],
+        }));
+
+        await codexAcpAgent.prompt({
+            sessionId: "session-id",
+            prompt: [{ type: "text", text: "Hello" }],
+        });
+
+        expect(extraRootsSetSpy).toHaveBeenCalledWith({
+            extraRoots: ["/workspace/extra/.agents/skills"],
+        });
+        expect(listSkillsSpy).toHaveBeenCalledWith({
+            cwds: ["/workspace", "/workspace/extra"],
+            forceReload: true,
+        });
+        expect(turnStartSpy.mock.calls[0]![0].sandboxPolicy).toMatchObject({
+            type: "workspaceWrite",
+            writableRoots: ["/workspace/extra"],
+        });
     });
 
     function loadNotifications(){
