@@ -36,10 +36,6 @@ import {logger} from "./Logger";
 import {sanitizeMcpServerName} from "./McpServerName";
 import {createResponseItemHistoryFallbackUpdates} from "./ResponseItemHistoryFallback";
 import {
-    type LegacyLoadSessionResponse,
-    type LegacyNewSessionResponse,
-    type LegacyResumeSessionResponse,
-    type LegacySessionModelState,
     type LegacySetSessionModelRequest,
     type LegacySetSessionModelResponse,
     isExtMethodRequest,
@@ -132,12 +128,6 @@ interface ActivePrompt {
 }
 
 export class CodexAcpServer {
-    private static readonly MODEL_NAME_TOKEN_OVERRIDES: Record<string, string> = {
-        gpt: "GPT",
-        mini: "Mini",
-        codex: "Codex",
-    };
-
     private readonly codexAcpClient: CodexAcpClient;
     private readonly connection: AcpClientConnection;
     private readonly defaultAuthRequest: CodexAuthRequest | null;
@@ -264,7 +254,7 @@ export class CodexAcpServer {
         }
     }
 
-    async getOrCreateSession(request: acp.NewSessionRequest | acp.ResumeSessionRequest): Promise<[SessionId, LegacySessionModelState, SessionModeState]> {
+    async getOrCreateSession(request: acp.NewSessionRequest | acp.ResumeSessionRequest): Promise<[SessionId, SessionModeState]> {
         try {
             return await this.tryCreateSession(request);
         } catch (e) {
@@ -345,7 +335,7 @@ export class CodexAcpServer {
         return generation;
     }
 
-    async tryCreateSession(request: acp.NewSessionRequest | acp.ResumeSessionRequest): Promise<[SessionId, LegacySessionModelState, SessionModeState]> {
+    async tryCreateSession(request: acp.NewSessionRequest | acp.ResumeSessionRequest): Promise<[SessionId, SessionModeState]> {
         const requestedSessionGeneration = "sessionId" in request
             ? this.beginSessionOpen(request.sessionId)
             : null;
@@ -429,10 +419,9 @@ export class CodexAcpServer {
         }
 
         this.publishAvailableCommandsAsync(sessionState);
-        const sessionModelState: LegacySessionModelState = this.createModelState(models, currentModelId);
         const sessionModeState: SessionModeState = sessionState.agentMode.toSessionModeState();
 
-        return [sessionId, sessionModelState, sessionModeState];
+        return [sessionId, sessionModeState];
     }
 
     private async getAuthStateForProvider(authProvider: string | null): Promise<ActiveAuthState> {
@@ -467,42 +456,43 @@ export class CodexAcpServer {
         return null;
     }
 
-    async loadSession(params: acp.LoadSessionRequest): Promise<LegacyLoadSessionResponse> {
+    // Model and reasoning controls are exposed through ACP config options.
+    async loadSession(params: acp.LoadSessionRequest): Promise<acp.LoadSessionResponse> {
         logger.log("Loading session...", {sessionId: params.sessionId});
         const {
             sessionId,
-            modelState,
             modeState,
             thread,
         } = await this.getOrCreateSessionWithHistory(params);
 
         await this.streamThreadHistory(sessionId, thread);
+        const sessionState = this.getSessionState(sessionId);
 
         logger.log("Session loaded", {
             sessionId: sessionId,
-            modelId: modelState.currentModelId,
-            availableModelCount: modelState.availableModels.length
+            modelId: sessionState.currentModelId,
+            availableModelCount: sessionState.availableModels.length
         });
         return {
-            models: modelState,
             modes: modeState,
-            ...this.createSessionConfigOptionsResponse(this.getSessionState(sessionId)),
+            ...this.createSessionConfigOptionsResponse(sessionState),
         };
     }
 
-    async resumeSession(params: acp.ResumeSessionRequest): Promise<LegacyResumeSessionResponse> {
+    // Model and reasoning controls are exposed through ACP config options.
+    async resumeSession(params: acp.ResumeSessionRequest): Promise<acp.ResumeSessionResponse> {
         logger.log("Resuming session...", {sessionId: params.sessionId});
-        const [sessionId, modelState, modeState] = await this.getOrCreateSession(params);
+        const [sessionId, modeState] = await this.getOrCreateSession(params);
+        const sessionState = this.getSessionState(sessionId);
 
         logger.log("Session resumed", {
             sessionId: sessionId,
-            modelId: modelState.currentModelId,
-            availableModelCount: modelState.availableModels.length
+            modelId: sessionState.currentModelId,
+            availableModelCount: sessionState.availableModels.length
         });
         return {
-            models: modelState,
             modes: modeState,
-            ...this.createSessionConfigOptionsResponse(this.getSessionState(sessionId)),
+            ...this.createSessionConfigOptionsResponse(sessionState),
         };
     }
 
@@ -594,23 +584,24 @@ export class CodexAcpServer {
         return this.sessionOpenGenerations.get(sessionId) === this.getSessionGeneration(sessionId);
     }
 
+    // Model and reasoning controls are exposed through ACP config options.
     async newSession(
         params: acp.NewSessionRequest,
-    ): Promise<LegacyNewSessionResponse> {
+    ): Promise<acp.NewSessionResponse> {
         logger.log("Starting new session...");
-        const [sessionId, modelState, modeState] = await this.getOrCreateSession(params);
+        const [sessionId, modeState] = await this.getOrCreateSession(params);
+        const sessionState = this.getSessionState(sessionId);
 
         logger.log("New session created", {
             sessionId: sessionId,
-            modelId: modelState.currentModelId,
-            availableModelCount: modelState.availableModels.length
+            modelId: sessionState.currentModelId,
+            availableModelCount: sessionState.availableModels.length
         });
 
         return {
             sessionId: sessionId,
-            models: modelState,
             modes: modeState,
-            ...this.createSessionConfigOptionsResponse(this.getSessionState(sessionId)),
+            ...this.createSessionConfigOptionsResponse(sessionState),
         };
     }
 
@@ -839,33 +830,10 @@ export class CodexAcpServer {
         return models.find(m => m.id === modelId.model);
     }
 
-    private normalizeModelDisplayName(displayName: string): string {
-        return displayName
-            .split("-")
-            .map((token) => CodexAcpServer.MODEL_NAME_TOKEN_OVERRIDES[token.toLowerCase()] ?? token)
-            .join("-");
-    }
-
-    private createModelState(availableModels: Model[], selectedModelId: string): LegacySessionModelState {
-        const allowedModels = availableModels
-            .flatMap((model) =>
-                model.supportedReasoningEfforts.map((effort) => ({
-                    modelId: ModelId.fromComponents(model, effort.reasoningEffort).toString(),
-                    name: `${this.normalizeModelDisplayName(model.displayName)} (${effort.reasoningEffort})`,
-                    description: `${model.description} ${effort.description}`,
-                }))
-            );
-        return {
-            availableModels: allowedModels,
-            currentModelId: selectedModelId,
-        }
-    }
-
     private async getOrCreateSessionWithHistory(
         request: acp.LoadSessionRequest
     ): Promise<{
         sessionId: SessionId;
-        modelState: LegacySessionModelState;
         modeState: SessionModeState;
         thread: Thread;
     }> {
@@ -944,12 +912,10 @@ export class CodexAcpServer {
         }
 
         await this.availableCommands.publish(sessionState);
-        const sessionModelState: LegacySessionModelState = this.createModelState(models, currentModelId);
         const sessionModeState: SessionModeState = sessionState.agentMode.toSessionModeState();
 
         return {
             sessionId: sessionId,
-            modelState: sessionModelState,
             modeState: sessionModeState,
             thread: thread,
         };

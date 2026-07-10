@@ -120,18 +120,15 @@ describe("Session config options", () => {
         expect(codexAcpAgent.getSessionState("session-id").currentModelId).toBe("custom-model[high]");
     });
 
-    it("keeps the legacy models list as combined model/effort entries", async () => {
+    // Guards the response against legacy configuration fields.
+    it("returns only ACP-standard session configuration fields", async () => {
         const {fast, slow} = buildModels();
         const {response} = await createSession("fast-model[medium]", [fast, slow]);
 
-        expect(response.models?.availableModels.map(m => m.modelId)).toEqual([
-            "fast-model[low]",
-            "fast-model[medium]",
-            "fast-model[high]",
-            "slow-model[low]",
-            "slow-model[medium]",
-        ]);
-        expect(response.models?.currentModelId).toBe("fast-model[medium]");
+        expect(response).not.toHaveProperty("models");
+        await expect(`${JSON.stringify(Object.keys(response).sort(), null, 2)}\n`).toMatchFileSnapshot(
+            "data/session-config-response-keys.json"
+        );
     });
 
     it("changes the agent mode via setSessionConfigOption", async () => {

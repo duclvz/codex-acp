@@ -1,7 +1,7 @@
 import path from "node:path";
 import {afterEach, expect, it} from "vitest";
 import {AgentMode} from "../../../AgentMode";
-import {legacySetSessionModel} from "../../../AcpExtensions";
+import {MODEL_CONFIG_ID, REASONING_EFFORT_CONFIG_ID} from "../../../ModelConfigOption";
 import {
     createAuthenticatedFixture,
     createGatewayFixture,
@@ -43,16 +43,22 @@ describeE2E("E2E tests", () => {
         fixture = await createAuthenticatedFixture();
         const session = await fixture.createSession();
 
-        const models = session.models;
-        if (!models) {
-            throw new Error("Agent did not return initial model state.");
+        const modelConfig = session.configOptions?.find(option => option.id === MODEL_CONFIG_ID);
+        if (modelConfig?.type !== "select") {
+            throw new Error("Agent did not return initial model configuration.");
         }
-        expect(models.availableModels.length).toBeGreaterThan(0);
-        expect(models.currentModelId).toBe(DEFAULT_TEST_MODEL_ID.toString());
+        expect(modelConfig.options.length).toBeGreaterThan(0);
+        expect(modelConfig.currentValue).toBe(DEFAULT_TEST_MODEL_ID.model);
 
-        await legacySetSessionModel(fixture.connection, {
+        await fixture.connection.setSessionConfigOption({
             sessionId: session.sessionId,
-            modelId: OTHER_TEST_MODEL_ID.toString(),
+            configId: MODEL_CONFIG_ID,
+            value: OTHER_TEST_MODEL_ID.model,
+        });
+        await fixture.connection.setSessionConfigOption({
+            sessionId: session.sessionId,
+            configId: REASONING_EFFORT_CONFIG_ID,
+            value: OTHER_TEST_MODEL_ID.effort,
         });
         await fixture.expectStatus(session.sessionId, {Model: OTHER_TEST_MODEL_ID});
     });

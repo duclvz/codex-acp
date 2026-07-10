@@ -7,7 +7,6 @@ import {expect, vi} from "vitest";
 import {ModelId} from "../../../ModelId";
 import {removeDirectoryWithRetry, writeCodexHomeConfig} from "../../acp-test-utils";
 import type {PermissionResponder} from "./permission-responders";
-import type {LegacyNewSessionResponse} from "../../../AcpExtensions";
 
 export const DEFAULT_TEST_MODEL_ID = ModelId.create("gpt-5.2", "none");
 export const OTHER_TEST_MODEL_ID = ModelId.create("gpt-5.4-mini", "low");
@@ -21,7 +20,7 @@ export interface TestSkill {
 export interface SpawnedAgentFixture {
     readonly connection: acp.ClientSideConnection;
     readonly workspaceDir: string;
-    createSession(mcpServers?: acp.McpServer[]): Promise<LegacyNewSessionResponse>;
+    createSession(mcpServers?: acp.McpServer[]): Promise<acp.NewSessionResponse>;
     restart(): Promise<SpawnedAgentFixture>;
     writeSkill(skill: TestSkill, rootDir?: string): void;
     setPermissionResponder(responder: PermissionResponder): void;
@@ -178,11 +177,11 @@ class SpawnedAgentFixtureImpl implements SpawnedAgentFixture {
         return this.paths.workspaceDir;
     }
 
-    async createSession(mcpServers: acp.McpServer[] = []): Promise<LegacyNewSessionResponse> {
+    async createSession(mcpServers: acp.McpServer[] = []): Promise<acp.NewSessionResponse> {
         return await this.connection.newSession({
             cwd: this.workspaceDir,
             mcpServers,
-        }) as LegacyNewSessionResponse;
+        });
     }
 
     async restart(): Promise<SpawnedAgentFixture> {

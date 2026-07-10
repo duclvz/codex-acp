@@ -10,6 +10,7 @@ import type {CodexAcpClient, SessionMetadata} from "../../CodexAcpClient";
 import type {McpStartupResult} from "../../CodexAppServerClient";
 import type {TurnStartResponse} from "../../app-server/v2";
 import type {McpServer} from "@agentclientprotocol/sdk";
+import {MODEL_CONFIG_ID, REASONING_EFFORT_CONFIG_ID} from "../../ModelConfigOption";
 
 const sessionId = "session-id";
 
@@ -284,9 +285,16 @@ describe("ACP session close", () => {
             cwd: "/test/cwd",
             mcpServers: [],
         })).resolves.toEqual(expect.objectContaining({
-            models: expect.objectContaining({
-                currentModelId: "model-id[medium]",
-            }),
+            configOptions: expect.arrayContaining([
+                expect.objectContaining({
+                    id: MODEL_CONFIG_ID,
+                    currentValue: "model-id",
+                }),
+                expect.objectContaining({
+                    id: REASONING_EFFORT_CONFIG_ID,
+                    currentValue: "medium",
+                }),
+            ]),
         }));
     });
 
