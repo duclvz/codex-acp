@@ -105,6 +105,7 @@ describe("Fast mode session config", () => {
         expect(codexAcpAgent.getSessionState("session-id").fastModeEnabled).toBe(true);
     });
 
+    // Disabled config options do not fall back to nonstandard fields.
     it("omits Fast mode config options for JetBrains 2026.1 IntelliJ clients", async () => {
         const {response} = await createSession(null, {
             name: "JetBrains.WebStorm",
@@ -116,6 +117,7 @@ describe("Fast mode session config", () => {
         });
 
         expect(response.configOptions).toBeUndefined();
+        expect(response).not.toHaveProperty("models");
     });
 
     it("omits Fast mode config options for JetBrains 2026.1 clients by name", async () => {

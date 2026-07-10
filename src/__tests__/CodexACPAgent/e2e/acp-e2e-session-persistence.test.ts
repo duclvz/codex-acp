@@ -1,5 +1,5 @@
 import {afterEach, expect, it} from "vitest";
-import {legacySetSessionModel, type LegacyLoadSessionResponse} from "../../../AcpExtensions";
+import {MODEL_CONFIG_ID, REASONING_EFFORT_CONFIG_ID} from "../../../ModelConfigOption";
 import {
     createAuthenticatedFixture,
     describeE2E,
@@ -23,7 +23,16 @@ describeE2E("E2E session persistence tests", () => {
         beforeRestartFixture = await createAuthenticatedFixture();
         const sessionId = (await beforeRestartFixture.createSession()).sessionId;
 
-        await legacySetSessionModel(beforeRestartFixture.connection, {sessionId, modelId: OTHER_TEST_MODEL_ID.toString()});
+        await beforeRestartFixture.connection.setSessionConfigOption({
+            sessionId,
+            configId: MODEL_CONFIG_ID,
+            value: OTHER_TEST_MODEL_ID.model,
+        });
+        await beforeRestartFixture.connection.setSessionConfigOption({
+            sessionId,
+            configId: REASONING_EFFORT_CONFIG_ID,
+            value: OTHER_TEST_MODEL_ID.effort,
+        });
         const memorizedToken = "token-for-tests-123";
         await beforeRestartFixture.expectPromptText(
             sessionId,
@@ -37,8 +46,11 @@ describeE2E("E2E session persistence tests", () => {
             sessionId,
             cwd: afterRestartFixture.workspaceDir,
             mcpServers: [],
-        }) as LegacyLoadSessionResponse;
-        expect(loadSessionResponse.models?.currentModelId).toBe(OTHER_TEST_MODEL_ID.toString());
+        });
+        expect(loadSessionResponse.configOptions?.find(option => option.id === MODEL_CONFIG_ID))
+            .toMatchObject({currentValue: OTHER_TEST_MODEL_ID.model});
+        expect(loadSessionResponse.configOptions?.find(option => option.id === REASONING_EFFORT_CONFIG_ID))
+            .toMatchObject({currentValue: OTHER_TEST_MODEL_ID.effort});
 
         await afterRestartFixture.expectPromptText(
             sessionId,

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { Model, ReasoningEffortOption } from "../../app-server/v2";
 import { createCodexMockTestFixture } from "../acp-test-utils";
+import {MODEL_CONFIG_ID} from "../../ModelConfigOption";
 
 describe("Model filtering", () => {
     it("filters available models by id allowlist", async () => {
@@ -133,10 +134,10 @@ describe("Model filtering", () => {
         vi.spyOn(codexAcpClient, "getAccount").mockResolvedValue({account: null, requiresOpenaiAuth: false});
 
         const newSessionResponse = await codexAcpAgent.newSession({ cwd: "", mcpServers: [] });
-        const sessionModels = newSessionResponse.models;
-        const availableModels = sessionModels?.availableModels;
+        const modelConfig = newSessionResponse.configOptions?.find(option => option.id === MODEL_CONFIG_ID);
+        const availableModels = modelConfig?.type === "select" ? modelConfig.options : undefined;
 
-        await expect(JSON.stringify(availableModels, null, 2)).toMatchFileSnapshot(
+        await expect(`${JSON.stringify(availableModels, null, 2)}\n`).toMatchFileSnapshot(
             "data/model-filtering.json"
         );
     });

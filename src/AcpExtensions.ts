@@ -1,23 +1,9 @@
 import type {
     ClientContext,
-    LoadSessionResponse,
-    NewSessionResponse,
-    ResumeSessionResponse,
     SessionId,
 } from "@agentclientprotocol/sdk";
 
 export const LEGACY_SET_SESSION_MODEL_METHOD = "session/set_model";
-
-export type LegacySessionModel = {
-    modelId: string;
-    name: string;
-    description?: string | null;
-}
-
-export type LegacySessionModelState = {
-    availableModels: Array<LegacySessionModel>;
-    currentModelId: string;
-}
 
 export type LegacySetSessionModelRequest = {
     sessionId: SessionId;
@@ -25,18 +11,6 @@ export type LegacySetSessionModelRequest = {
 }
 
 export type LegacySetSessionModelResponse = {}
-
-export type LegacyNewSessionResponse = NewSessionResponse & {
-    models?: LegacySessionModelState | null;
-}
-
-export type LegacyLoadSessionResponse = LoadSessionResponse & {
-    models?: LegacySessionModelState | null;
-}
-
-export type LegacyResumeSessionResponse = ResumeSessionResponse & {
-    models?: LegacySessionModelState | null;
-}
 
 export type ExtMethodRequest =
     AuthenticationStatusRequest
