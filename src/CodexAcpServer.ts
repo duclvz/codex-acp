@@ -46,7 +46,6 @@ import {
     LEGACY_SET_SESSION_MODEL_METHOD,
 } from "./AcpExtensions";
 import {
-    createCollabAgentToolCallUpdate,
     createCommandExecutionCompleteUpdate,
     createCommandExecutionUpdate,
     createDynamicToolCallUpdate,
@@ -74,6 +73,7 @@ import {
     createAgentTextThoughtChunk,
     createUserMessageChunk,
 } from "./ContentChunks";
+import { getSubAgentActivityTracker } from "./SubAgentActivityTracker";
 
 export interface ThreadGoalSnapshot {
     objective: string;
@@ -178,7 +178,7 @@ export class CodexAcpServer {
         this.getRecentStderr = getRecentStderr ?? (() => "");
         this.clientInfo = null;
         this.clientCapabilities = null;
-        this.terminalOutputMode = "terminal_output_delta";
+        this.terminalOutputMode = "content";
         this.booleanConfigOptionsSupported = false;
         this.availableCommands = new CodexCommands(
             connection,
@@ -984,9 +984,10 @@ export class CodexAcpServer {
             case "userMessage":
                 return this.createUserMessageUpdates(item);
             case "hookPrompt":
-            case "subAgentActivity":
             case "sleep":
                 return [];
+            case "subAgentActivity":
+                return getSubAgentActivityTracker(sessionState).mapSubAgentActivity(item, "completed");
             case "agentMessage": {
                 const meta = createCodexMessagePhaseMeta(item.phase);
                 return [{
@@ -1001,7 +1002,7 @@ export class CodexAcpServer {
             case "fileChange":
                 return [await createFileChangeUpdate(item)];
             case "commandExecution": {
-                const updates = [await createCommandExecutionUpdate(item)];
+                const updates = [await createCommandExecutionUpdate(item, sessionState.terminalOutputMode)];
                 const completeUpdate = createCommandExecutionCompleteUpdate(item, sessionState.terminalOutputMode);
                 if (completeUpdate) {
                     updates.push(completeUpdate);
@@ -1013,7 +1014,7 @@ export class CodexAcpServer {
             case "dynamicToolCall":
                 return [await createDynamicToolCallUpdate(item)];
             case "collabAgentToolCall":
-                return [createCollabAgentToolCallUpdate(item)];
+                return getSubAgentActivityTracker(sessionState).mapCollabAgentToolCall(item, "completed");
             case "webSearch":
                 return [this.createWebSearchUpdate(item)];
             case "imageView":
@@ -1686,9 +1687,9 @@ function mergeHistoryUpdates(
     const seen = new Set<string>();
     let fallbackIndex = 0;
 
-    const pushUpdate = (update: UpdateSessionEvent) => {
+    const pushUpdate = (update: UpdateSessionEvent, dedupe: boolean = true) => {
         const key = historyUpdateKey(update);
-        if (key && seen.has(key)) {
+        if (dedupe && key && seen.has(key)) {
             return;
         }
         if (key) {
@@ -1724,7 +1725,10 @@ function mergeHistoryUpdates(
 
     for (const update of threadUpdates) {
         flushFallbackBeforeMatchingDuplicate(update);
-        pushUpdate(update);
+        // Thread history is authoritative and can legitimately contain several
+        // progress updates for the same tool call. Only fallback records are
+        // deduplicated against those updates.
+        pushUpdate(update, false);
     }
 
     while (fallbackIndex < responseItemFallbackUpdates.length) {
