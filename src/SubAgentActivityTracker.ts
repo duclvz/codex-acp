@@ -222,6 +222,7 @@ export class SubAgentActivityTracker {
         startItem?: CollabAgentToolCallItem,
     ): UpdateSessionEvent {
         const activity: Activity = { agentThreadId, toolCallId, agentPath, status };
+        const rawInput = this.activityRawInput(activity, startItem);
         this.activities.set(agentThreadId, activity);
         return {
             sessionUpdate: "tool_call",
@@ -229,7 +230,7 @@ export class SubAgentActivityTracker {
             kind: "other",
             title: this.activityTitle(activity),
             status,
-            ...(startItem ? { rawInput: this.startRawInput(startItem) } : {}),
+            ...(rawInput ? { rawInput } : {}),
             rawOutput: {
                 agentThreadId,
                 ...(agentPath ? { agentPath } : {}),
@@ -323,7 +324,35 @@ export class SubAgentActivityTracker {
     }
 
     private activityTitle(activity: Activity): string {
-        return activity.agentPath ? `Subagent ${activity.agentPath}` : "Subagent activity";
+        return this.activityDescription(activity) ?? "Agent activity";
+    }
+
+    private activityDescription(activity: Activity): string | null {
+        // Use the canonical task name as the client-facing description.
+        const segments = activity.agentPath?.split("/").filter(Boolean);
+        const taskName = segments?.[segments.length - 1];
+        if (!taskName || taskName === "root") {
+            return null;
+        }
+        const readableTaskName = taskName.replace(/_+/g, " ").trim();
+        if (!readableTaskName) {
+            return null;
+        }
+        return `${readableTaskName.charAt(0).toUpperCase()}${readableTaskName.slice(1)}`;
+    }
+
+    private activityRawInput(
+        activity: Activity,
+        startItem?: CollabAgentToolCallItem,
+    ): Record<string, unknown> | null {
+        const description = this.activityDescription(activity);
+        if (!description && !startItem) {
+            return null;
+        }
+        return {
+            ...(description ? { description } : {}),
+            ...(startItem ? this.startRawInput(startItem) : {}),
+        };
     }
 
     private activityMeta(agentThreadId: string | null, runId: string): Record<string, unknown> {

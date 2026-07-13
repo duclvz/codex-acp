@@ -38,7 +38,7 @@ describe("CodexEventHandler - collab agent tool call events", () => {
                         id: "activity-initial",
                         kind: "started",
                         agentThreadId: "thread-paris",
-                        agentPath: "/root/weather",
+                        agentPath: "/root/weather_audit",
                     },
                 },
             },

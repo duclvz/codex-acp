@@ -7,11 +7,14 @@
         "sessionUpdate": "tool_call",
         "toolCallId": "activity-initial",
         "kind": "other",
-        "title": "Subagent /root/weather",
+        "title": "Weather audit",
         "status": "in_progress",
+        "rawInput": {
+          "description": "Weather audit"
+        },
         "rawOutput": {
           "agentThreadId": "thread-paris",
-          "agentPath": "/root/weather",
+          "agentPath": "/root/weather_audit",
           "activity": "started"
         },
         "_meta": {
@@ -35,7 +38,7 @@
       "update": {
         "sessionUpdate": "tool_call_update",
         "toolCallId": "activity-initial",
-        "title": "Subagent /root/weather",
+        "title": "Weather audit",
         "status": "completed",
         "content": [
           {
@@ -48,7 +51,7 @@
         ],
         "rawOutput": {
           "agentThreadId": "thread-paris",
-          "agentPath": "/root/weather",
+          "agentPath": "/root/weather_audit",
           "turnId": "child-turn-1",
           "turnStatus": "completed",
           "result": "@agentclientprotocol/codex-acp",
@@ -76,16 +79,17 @@
         "sessionUpdate": "tool_call",
         "toolCallId": "resume-1",
         "kind": "other",
-        "title": "Subagent /root/weather",
+        "title": "Weather audit",
         "status": "in_progress",
         "rawInput": {
+          "description": "Weather audit",
           "prompt": null,
           "model": null,
           "reasoningEffort": null
         },
         "rawOutput": {
           "agentThreadId": "thread-paris",
-          "agentPath": "/root/weather",
+          "agentPath": "/root/weather_audit",
           "action": "resumeAgent",
           "actionStatus": "inProgress",
           "senderThreadId": "thread-main",
@@ -119,7 +123,7 @@
       "update": {
         "sessionUpdate": "tool_call_update",
         "toolCallId": "resume-1",
-        "title": "Subagent /root/weather",
+        "title": "Weather audit",
         "status": "in_progress",
         "content": [
           {
@@ -132,7 +136,7 @@
         ],
         "rawOutput": {
           "agentThreadId": "thread-paris",
-          "agentPath": "/root/weather",
+          "agentPath": "/root/weather_audit",
           "action": "resumeAgent",
           "actionStatus": "completed",
           "senderThreadId": "thread-main",
@@ -166,7 +170,7 @@
       "update": {
         "sessionUpdate": "tool_call_update",
         "toolCallId": "resume-1",
-        "title": "Subagent /root/weather",
+        "title": "Weather audit",
         "status": "in_progress",
         "content": [
           {
@@ -179,7 +183,7 @@
         ],
         "rawOutput": {
           "agentThreadId": "thread-paris",
-          "agentPath": "/root/weather",
+          "agentPath": "/root/weather_audit",
           "action": "sendInput",
           "actionStatus": "completed",
           "senderThreadId": "thread-main",
@@ -213,7 +217,7 @@
       "update": {
         "sessionUpdate": "tool_call_update",
         "toolCallId": "resume-1",
-        "title": "Subagent /root/weather",
+        "title": "Weather audit",
         "status": "completed",
         "content": [
           {
@@ -226,7 +230,7 @@
         ],
         "rawOutput": {
           "agentThreadId": "thread-paris",
-          "agentPath": "/root/weather",
+          "agentPath": "/root/weather_audit",
           "turnId": "child-turn-2",
           "turnStatus": "completed",
           "result": "No alerts found.",
@@ -253,11 +257,11 @@
       "update": {
         "sessionUpdate": "tool_call_update",
         "toolCallId": "resume-1",
-        "title": "Subagent /root/weather",
+        "title": "Weather audit",
         "status": "completed",
         "rawOutput": {
           "agentThreadId": "thread-paris",
-          "agentPath": "/root/weather",
+          "agentPath": "/root/weather_audit",
           "action": "closeAgent",
           "actionStatus": "completed",
           "senderThreadId": "thread-main",
